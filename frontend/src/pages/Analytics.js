@@ -8,7 +8,9 @@ import {
   Package,
   BarChart3,
   PieChart as PieIcon,
-  Activity
+  Activity,
+  Filter,
+  RefreshCw
 } from "lucide-react";
 import { 
   LineChart, Line, AreaChart, Area, BarChart, Bar,
@@ -16,6 +18,8 @@ import {
   PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -39,43 +43,55 @@ const CustomTooltip = ({ active, payload, label }) => {
 const COLORS = ['#6366f1', '#06b6d4', '#f97316', '#22c55e', '#a855f7'];
 
 export default function Analytics() {
+  const [products, setProducts] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState("all");
+  const [selectedSupplier, setSelectedSupplier] = useState("all");
   const [demandTrend, setDemandTrend] = useState([]);
   const [inventoryLevels, setInventoryLevels] = useState([]);
   const [supplierPerformance, setSupplierPerformance] = useState([]);
   const [costBreakdown, setCostBreakdown] = useState([]);
+  const [shipmentStats, setShipmentStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      const [productsRes, suppliersRes, demandRes, inventoryRes, supplierRes, costRes, shipmentRes] = await Promise.all([
+        axios.get(`${API}/products`),
+        axios.get(`${API}/suppliers`),
+        axios.get(`${API}/analytics/demand-trend${selectedProduct !== 'all' ? `?product_id=${selectedProduct}` : ''}`),
+        axios.get(`${API}/analytics/inventory-levels`),
+        axios.get(`${API}/analytics/supplier-performance${selectedSupplier !== 'all' ? `?supplier_id=${selectedSupplier}` : ''}`),
+        axios.get(`${API}/analytics/cost-breakdown`),
+        axios.get(`${API}/analytics/shipments${selectedSupplier !== 'all' ? `?supplier_id=${selectedSupplier}` : ''}`),
+      ]);
+      
+      setProducts(productsRes.data.products);
+      setSuppliers(suppliersRes.data.suppliers);
+      setDemandTrend(demandRes.data.data);
+      setInventoryLevels(inventoryRes.data.data);
+      setSupplierPerformance(supplierRes.data.data);
+      setCostBreakdown(costRes.data.data);
+      setShipmentStats(shipmentRes.data);
+    } catch (error) {
+      console.error("Failed to fetch analytics data:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchAnalyticsData = async () => {
-      try {
-        const [demandRes, inventoryRes, supplierRes, costRes] = await Promise.all([
-          axios.get(`${API}/analytics/demand-trend`),
-          axios.get(`${API}/analytics/inventory-levels`),
-          axios.get(`${API}/analytics/supplier-performance`),
-          axios.get(`${API}/analytics/cost-breakdown`),
-        ]);
-        
-        setDemandTrend(demandRes.data.data);
-        setInventoryLevels(inventoryRes.data.data);
-        setSupplierPerformance(supplierRes.data.data);
-        setCostBreakdown(costRes.data.data);
-      } catch (error) {
-        console.error("Failed to fetch analytics data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAnalyticsData();
+    fetchData();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96" data-testid="analytics-loading">
-        <div className="text-zinc-500">Loading analytics...</div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!loading) {
+      setRefreshing(true);
+      fetchData();
+    }
+  }, [selectedProduct, selectedSupplier]);
 
   // Transform supplier data for radar chart
   const radarData = supplierPerformance.length > 0 ? [
@@ -85,18 +101,70 @@ export default function Analytics() {
     { metric: 'Risk (inv)', value: 100 - supplierPerformance.reduce((a, b) => a + b.risk, 0) / supplierPerformance.length },
   ] : [];
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96" data-testid="analytics-loading">
+        <div className="text-zinc-500">Loading analytics...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6" data-testid="analytics-page">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">Analytics</h1>
-        <p className="text-zinc-500 mt-1">Deep insights into supply chain performance</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Analytics</h1>
+          <p className="text-zinc-500 mt-1">Deep insights from real supply chain data</p>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          {/* Product Filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-zinc-500" />
+            <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+              <SelectTrigger className="w-44 bg-zinc-900 border-zinc-800" data-testid="product-filter">
+                <SelectValue placeholder="Product" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Products</SelectItem>
+                {products.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Supplier Filter */}
+          <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
+            <SelectTrigger className="w-44 bg-zinc-900 border-zinc-800" data-testid="supplier-filter">
+              <SelectValue placeholder="Supplier" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Suppliers</SelectItem>
+              {suppliers.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => { setRefreshing(true); fetchData(); }}
+            disabled={refreshing}
+            className="bg-zinc-900 border-zinc-800"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="bg-zinc-900 border border-zinc-800">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
+          <TabsTrigger value="shipments">Shipments</TabsTrigger>
           <TabsTrigger value="costs">Costs</TabsTrigger>
           <TabsTrigger value="roi">ROI Analysis</TabsTrigger>
         </TabsList>
@@ -106,7 +174,14 @@ export default function Analytics() {
           <div className="bento-grid">
             {/* Demand Trend */}
             <div className="bento-item span-8" data-testid="demand-trend-chart">
-              <h3 className="text-lg font-semibold text-white mb-4">Demand Trend Analysis</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">
+                Demand Trend Analysis
+                {selectedProduct !== 'all' && (
+                  <span className="text-sm font-normal text-zinc-500 ml-2">
+                    ({products.find(p => p.id === selectedProduct)?.name})
+                  </span>
+                )}
+              </h3>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={demandTrend}>
@@ -150,11 +225,11 @@ export default function Analytics() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={inventoryLevels}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                    <XAxis dataKey="warehouse" stroke="#71717a" fontSize={12} />
+                    <XAxis dataKey="warehouse_name" stroke="#71717a" fontSize={10} angle={-45} textAnchor="end" height={60} />
                     <YAxis stroke="#71717a" fontSize={12} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="current" fill="#6366f1" radius={[4, 4, 0, 0]} name="Current" />
-                    <Bar dataKey="optimal" fill="#3f3f46" radius={[4, 4, 0, 0]} name="Optimal" />
+                    <Bar dataKey="total_stock" fill="#6366f1" radius={[4, 4, 0, 0]} name="Stock" />
+                    <Bar dataKey="total_value" fill="#22c55e" radius={[4, 4, 0, 0]} name="Value ($)" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -167,7 +242,14 @@ export default function Analytics() {
           <div className="grid grid-cols-12 gap-6">
             {/* Supplier Performance Table */}
             <div className="col-span-8 bg-zinc-900/50 rounded-xl border border-zinc-800/50 p-6" data-testid="supplier-table">
-              <h3 className="text-lg font-semibold text-white mb-4">Supplier Performance Matrix</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">
+                Supplier Performance Matrix
+                {selectedSupplier !== 'all' && (
+                  <span className="text-sm font-normal text-zinc-500 ml-2">
+                    ({suppliers.find(s => s.id === selectedSupplier)?.name})
+                  </span>
+                )}
+              </h3>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -190,7 +272,7 @@ export default function Analytics() {
                               style={{ width: `${supplier.quality}%` }}
                             />
                           </div>
-                          <span className="text-xs">{supplier.quality}%</span>
+                          <span className="text-xs">{supplier.quality?.toFixed(1)}%</span>
                         </div>
                       </td>
                       <td>
@@ -201,7 +283,7 @@ export default function Analytics() {
                               style={{ width: `${supplier.delivery}%` }}
                             />
                           </div>
-                          <span className="text-xs">{supplier.delivery}%</span>
+                          <span className="text-xs">{supplier.delivery?.toFixed(1)}%</span>
                         </div>
                       </td>
                       <td>
@@ -212,12 +294,12 @@ export default function Analytics() {
                               style={{ width: `${supplier.cost}%` }}
                             />
                           </div>
-                          <span className="text-xs">{supplier.cost}%</span>
+                          <span className="text-xs">{supplier.cost?.toFixed(1)}%</span>
                         </div>
                       </td>
                       <td>
                         <span className={`risk-badge ${supplier.risk < 30 ? 'low' : supplier.risk < 50 ? 'medium' : 'high'}`}>
-                          {supplier.risk}%
+                          {supplier.risk?.toFixed(1)}%
                         </span>
                       </td>
                     </tr>
@@ -249,6 +331,75 @@ export default function Analytics() {
           </div>
         </TabsContent>
 
+        {/* Shipments Tab */}
+        <TabsContent value="shipments" className="space-y-6 mt-6">
+          <div className="grid grid-cols-12 gap-6">
+            {/* Shipment Stats */}
+            <div className="col-span-8 bg-zinc-900/50 rounded-xl border border-zinc-800/50 p-6" data-testid="shipment-stats">
+              <h3 className="text-lg font-semibold text-white mb-6">Shipment Performance</h3>
+              
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="p-4 bg-zinc-950 rounded-lg text-center">
+                  <p className="text-3xl font-bold text-white font-mono">{shipmentStats?.total_shipments || 0}</p>
+                  <p className="text-xs text-zinc-500 mt-1">Total Shipments</p>
+                </div>
+                <div className="p-4 bg-zinc-950 rounded-lg text-center">
+                  <p className="text-3xl font-bold text-emerald-400 font-mono">{shipmentStats?.on_time || 0}</p>
+                  <p className="text-xs text-zinc-500 mt-1">On Time</p>
+                </div>
+                <div className="p-4 bg-zinc-950 rounded-lg text-center">
+                  <p className="text-3xl font-bold text-amber-400 font-mono">{shipmentStats?.delayed || 0}</p>
+                  <p className="text-xs text-zinc-500 mt-1">Delayed</p>
+                </div>
+                <div className="p-4 bg-zinc-950 rounded-lg text-center">
+                  <p className="text-3xl font-bold text-blue-400 font-mono">{shipmentStats?.on_time_rate || 0}%</p>
+                  <p className="text-xs text-zinc-500 mt-1">On-Time Rate</p>
+                </div>
+              </div>
+
+              {/* Delay Reasons */}
+              {shipmentStats?.delay_reasons && (
+                <div>
+                  <h4 className="text-sm font-semibold text-zinc-400 mb-3">Delay Reasons Breakdown</h4>
+                  <div className="space-y-2">
+                    {Object.entries(shipmentStats.delay_reasons).map(([reason, count], idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 bg-zinc-950 rounded">
+                        <span className="text-sm text-zinc-300">{reason}</span>
+                        <span className="text-sm font-mono text-zinc-500">{count} shipments</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Average Delay */}
+            <div className="col-span-4 bg-zinc-900/50 rounded-xl border border-zinc-800/50 p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Delay Metrics</h3>
+              <div className="space-y-6">
+                <div className="text-center p-6 bg-zinc-950 rounded-lg">
+                  <p className="text-5xl font-bold text-amber-400 font-mono">
+                    {shipmentStats?.avg_delay_days?.toFixed(1) || 0}
+                  </p>
+                  <p className="text-sm text-zinc-500 mt-2">Avg Delay (days)</p>
+                </div>
+                <div className="p-4 bg-zinc-950 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-zinc-400">On-Time Target</span>
+                    <span className="text-sm font-mono text-zinc-300">95%</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-zinc-400">Current Rate</span>
+                    <span className={`text-sm font-mono ${(shipmentStats?.on_time_rate || 0) >= 95 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {shipmentStats?.on_time_rate || 0}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
         {/* Costs Tab */}
         <TabsContent value="costs" className="space-y-6 mt-6">
           <div className="grid grid-cols-12 gap-6">
@@ -265,7 +416,8 @@ export default function Analytics() {
                       innerRadius={60}
                       outerRadius={100}
                       paddingAngle={2}
-                      dataKey="value"
+                      dataKey="percentage"
+                      nameKey="category"
                     >
                       {costBreakdown.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -279,15 +431,15 @@ export default function Analytics() {
                 {costBreakdown.map((entry, idx) => (
                   <div key={idx} className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                    <span className="text-xs text-zinc-400">{entry.category}: {entry.value}%</span>
+                    <span className="text-xs text-zinc-400">{entry.category}: {entry.percentage?.toFixed(1)}%</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Cost Trends */}
-            <div className="col-span-6 bg-zinc-900/50 rounded-xl border border-zinc-800/50 p-6" data-testid="cost-trends">
-              <h3 className="text-lg font-semibold text-white mb-4">Cost Optimization Trends</h3>
+            {/* Cost Details */}
+            <div className="col-span-6 bg-zinc-900/50 rounded-xl border border-zinc-800/50 p-6" data-testid="cost-details">
+              <h3 className="text-lg font-semibold text-white mb-4">Cost Details</h3>
               <div className="space-y-4">
                 {costBreakdown.map((item, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg">
@@ -298,15 +450,21 @@ export default function Analytics() {
                       />
                       <span className="text-sm text-zinc-300">{item.category}</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-mono text-white">{item.value}%</span>
-                      <div className={`flex items-center gap-1 text-xs ${item.trend < 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {item.trend < 0 ? <TrendingDown className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
-                        {Math.abs(item.trend)}%
-                      </div>
+                    <div className="text-right">
+                      <span className="text-sm font-mono text-white">${(item.cost || 0).toLocaleString()}</span>
+                      <span className="text-xs text-zinc-500 ml-2">({item.percentage?.toFixed(1)}%)</span>
                     </div>
                   </div>
                 ))}
+                
+                <div className="pt-4 border-t border-zinc-800">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-zinc-300">Total Logistics Cost</span>
+                    <span className="text-lg font-bold font-mono text-white">
+                      ${(costBreakdown[0]?.total_logistics_cost || 0).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -337,14 +495,14 @@ export default function Analytics() {
                   </div>
                 </div>
 
-                {/* Operational Improvements */}
+                {/* AI Improvements */}
                 <div>
-                  <h4 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Operational Improvements</h4>
+                  <h4 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">AI-Driven Improvements</h4>
                   <div className="grid grid-cols-3 gap-4">
                     {[
-                      { label: "Disruption Response", value: "40%", desc: "Faster response time" },
-                      { label: "Forecast Accuracy", value: "25%", desc: "Improvement" },
-                      { label: "Manual Effort", value: "60%", desc: "Reduction" },
+                      { label: "Disruption Response", value: "40%", desc: "Faster with LangChain agents" },
+                      { label: "Forecast Accuracy", value: "25%", desc: "Improvement with ML" },
+                      { label: "Manual Effort", value: "60%", desc: "Reduction in planning" },
                     ].map((item, idx) => (
                       <div key={idx} className="p-4 bg-zinc-800/30 rounded-lg">
                         <p className="text-xs text-zinc-500 mb-1">{item.label}</p>

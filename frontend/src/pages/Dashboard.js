@@ -12,13 +12,17 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Zap,
-  Bot
+  Bot,
+  RefreshCw,
+  Filter
 } from "lucide-react";
 import { 
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell
 } from "recharts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -70,48 +74,65 @@ export default function Dashboard() {
   const [kpis, setKpis] = useState([]);
   const [demandTrend, setDemandTrend] = useState([]);
   const [inventoryLevels, setInventoryLevels] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchDashboardData = async (productFilter = null) => {
+    try {
+      const [metricsRes, kpisRes, demandRes, inventoryRes, productsRes] = await Promise.all([
+        axios.get(`${API}/metrics/system`),
+        axios.get(`${API}/metrics/kpis`),
+        axios.get(`${API}/analytics/demand-trend${productFilter ? `?product_id=${productFilter}` : ''}`),
+        axios.get(`${API}/analytics/inventory-levels`),
+        axios.get(`${API}/products`),
+      ]);
+      
+      setMetrics(metricsRes.data);
+      setKpis(kpisRes.data.kpis);
+      setDemandTrend(demandRes.data.data);
+      setInventoryLevels(inventoryRes.data.data);
+      setProducts(productsRes.data.products);
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const [metricsRes, kpisRes, demandRes, inventoryRes] = await Promise.all([
-          axios.get(`${API}/metrics/system`),
-          axios.get(`${API}/metrics/kpis`),
-          axios.get(`${API}/analytics/demand-trend`),
-          axios.get(`${API}/analytics/inventory-levels`),
-        ]);
-        
-        setMetrics(metricsRes.data);
-        setKpis(kpisRes.data.kpis);
-        setDemandTrend(demandRes.data.data);
-        setInventoryLevels(inventoryRes.data.data);
-      } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchDashboardData();
   }, []);
+
+  const handleProductChange = async (value) => {
+    setSelectedProduct(value);
+    setRefreshing(true);
+    await fetchDashboardData(value === "all" ? null : value);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchDashboardData(selectedProduct === "all" ? null : selectedProduct);
+  };
 
   const kpiIcons = {
     "Cost Savings": DollarSign,
     "On-Time Delivery": Truck,
-    "Inventory Turnover": Package,
-    "Supplier Risk Score": AlertTriangle,
+    "Inventory Value": Package,
+    "Supplier Risk Avg": AlertTriangle,
     "Forecast Accuracy": BarChart3,
-    "Carbon Footprint": Activity,
+    "Fill Rate": Activity,
   };
 
   const kpiColors = {
     "Cost Savings": "#10b981",
     "On-Time Delivery": "#3b82f6",
-    "Inventory Turnover": "#f59e0b",
-    "Supplier Risk Score": "#f97316",
+    "Inventory Value": "#f59e0b",
+    "Supplier Risk Avg": "#f97316",
     "Forecast Accuracy": "#6366f1",
-    "Carbon Footprint": "#22c55e",
+    "Fill Rate": "#22c55e",
   };
 
   if (loading) {
@@ -124,15 +145,74 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
-      {/* Header */}
+      {/* Header with Controls */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Dashboard</h1>
-          <p className="text-zinc-500 mt-1">Supply chain intelligence overview</p>
+          <p className="text-zinc-500 mt-1">Supply chain intelligence powered by LangChain agents</p>
         </div>
-        <div className="flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-lg border border-zinc-800">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-          <span className="text-sm text-zinc-400">System Active</span>
+        <div className="flex items-center gap-4">
+          {/* Product Filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-zinc-500" />
+            <Select value={selectedProduct} onValueChange={handleProductChange}>
+              <SelectTrigger className="w-48 bg-zinc-900 border-zinc-800" data-testid="product-filter">
+                <SelectValue placeholder="Filter by product" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Products</SelectItem>
+                {products.map((product) => (
+                  <SelectItem key={product.id} value={product.id}>
+                    {product.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="bg-zinc-900 border-zinc-800"
+            data-testid="refresh-btn"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          
+          <div className="flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-lg border border-zinc-800">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            <span className="text-sm text-zinc-400">System Active</span>
+          </div>
+        </div>
+      </div>
+
+      {/* System Stats Banner */}
+      <div className="p-4 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl border border-indigo-500/20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <Bot className="w-5 h-5 text-indigo-400" />
+              <span className="text-sm text-zinc-300">{metrics?.active_agents || 5} Active Agents</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-purple-400" />
+              <span className="text-sm text-zinc-300">{metrics?.total_workflows || 10} Workflows</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-cyan-400" />
+              <span className="text-sm text-zinc-300">{metrics?.products_tracked || 10} Products</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Truck className="w-5 h-5 text-amber-400" />
+              <span className="text-sm text-zinc-300">{metrics?.suppliers_monitored || 8} Suppliers</span>
+            </div>
+          </div>
+          <div className="text-xs text-zinc-500">
+            Powered by LangChain + Ollama Llama3
+          </div>
         </div>
       </div>
 
@@ -156,7 +236,12 @@ export default function Dashboard() {
         {/* Demand Trend Chart */}
         <div className="bento-item span-8" data-testid="demand-chart">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-white">Demand Trend</h3>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Demand Trend</h3>
+              <p className="text-xs text-zinc-500">
+                {selectedProduct === "all" ? "Aggregated across all products" : `Filtered by ${products.find(p => p.id === selectedProduct)?.name}`}
+              </p>
+            </div>
             <span className="text-xs text-zinc-500">Actual vs Forecast</span>
           </div>
           <div className="h-64">
@@ -209,7 +294,7 @@ export default function Dashboard() {
                 <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
                   <Bot className="w-4 h-4 text-indigo-400" />
                 </div>
-                <span className="text-sm text-zinc-300">Active Agents</span>
+                <span className="text-sm text-zinc-300">LangChain Agents</span>
               </div>
               <span className="text-lg font-mono font-bold text-white">{metrics?.active_agents || 5}</span>
             </div>
@@ -218,16 +303,16 @@ export default function Dashboard() {
                 <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
                   <Zap className="w-4 h-4 text-purple-400" />
                 </div>
-                <span className="text-sm text-zinc-300">Workflows</span>
+                <span className="text-sm text-zinc-300">Tools Available</span>
               </div>
-              <span className="text-lg font-mono font-bold text-white">{metrics?.total_workflows || 10}</span>
+              <span className="text-lg font-mono font-bold text-white">8</span>
             </div>
             <div className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-lg">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                   <Activity className="w-4 h-4 text-emerald-400" />
                 </div>
-                <span className="text-sm text-zinc-300">Decisions Today</span>
+                <span className="text-sm text-zinc-300">Decisions Made</span>
               </div>
               <span className="text-lg font-mono font-bold text-white">{metrics?.decisions_today || 0}</span>
             </div>
@@ -236,9 +321,9 @@ export default function Dashboard() {
                 <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
                   <AlertTriangle className="w-4 h-4 text-amber-400" />
                 </div>
-                <span className="text-sm text-zinc-300">Risk Alerts</span>
+                <span className="text-sm text-zinc-300">Inventory Health</span>
               </div>
-              <span className="text-lg font-mono font-bold text-white">{metrics?.risk_alerts || 0}</span>
+              <span className="text-lg font-mono font-bold text-white">{metrics?.inventory_health || 0}%</span>
             </div>
           </div>
         </div>
@@ -253,10 +338,9 @@ export default function Dashboard() {
               <BarChart data={inventoryLevels} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis type="number" stroke="#71717a" fontSize={12} />
-                <YAxis dataKey="warehouse" type="category" stroke="#71717a" fontSize={12} width={60} />
+                <YAxis dataKey="warehouse_name" type="category" stroke="#71717a" fontSize={10} width={100} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="current" fill="#6366f1" radius={[0, 4, 4, 0]} name="Current" />
-                <Bar dataKey="optimal" fill="#3f3f46" radius={[0, 4, 4, 0]} name="Optimal" />
+                <Bar dataKey="total_stock" fill="#6366f1" radius={[0, 4, 4, 0]} name="Stock" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -267,15 +351,16 @@ export default function Dashboard() {
           <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: "Run Forecast", icon: TrendingUp, color: "#6366f1" },
-              { label: "Check Inventory", icon: Package, color: "#06b6d4" },
-              { label: "Analyze Suppliers", icon: AlertTriangle, color: "#f97316" },
-              { label: "Generate Report", icon: BarChart3, color: "#22c55e" },
+              { label: "Run Forecast", icon: TrendingUp, color: "#6366f1", path: "/supplier-risk" },
+              { label: "Check Inventory", icon: Package, color: "#06b6d4", path: "/analytics" },
+              { label: "Analyze Suppliers", icon: AlertTriangle, color: "#f97316", path: "/supplier-risk" },
+              { label: "View Reports", icon: BarChart3, color: "#22c55e", path: "/reports" },
             ].map((action) => (
               <button
                 key={action.label}
                 className="flex items-center gap-3 p-4 bg-zinc-900/50 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors text-left"
                 data-testid={`action-${action.label.toLowerCase().replace(/\s+/g, '-')}`}
+                onClick={() => window.location.href = action.path}
               >
                 <div 
                   className="w-10 h-10 rounded-lg flex items-center justify-center"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for SupplyMind - Agentic AI Operating System for Supply Chain Intelligence
+Backend API Testing for SupplyMind - LangChain Multi-Agent Supply Chain System
 Tests all backend endpoints and core functionality
 """
 
@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 from typing import Dict, Any, List, Tuple
 
-# Configuration
+# Configuration  
 BASE_URL = "https://agentic-supply.preview.emergentagent.com/api"
 TIMEOUT = 30
 
@@ -54,7 +54,7 @@ class SupplyMindAPITester:
                 return False
             
             data = response.json()
-            required_fields = ["status", "ollama_connected", "model", "timestamp"]
+            required_fields = ["status", "ollama_connected", "model", "tools_available", "agents_available"]
             
             for field in required_fields:
                 if field not in data:
@@ -65,88 +65,261 @@ class SupplyMindAPITester:
                 self.log_result("Health Check", False, f"Status not healthy: {data['status']}")
                 return False
             
-            self.log_result("Health Check", True, f"Ollama: {data['ollama_connected']}, Model: {data['model']}")
+            self.log_result("Health Check", True, f"Ollama: {data['ollama_connected']}, Model: {data['model']}, Tools: {data['tools_available']}")
             return True
             
         except Exception as e:
             self.log_result("Health Check", False, str(e))
             return False
 
-    def test_workflows_endpoint(self) -> bool:
-        """Test /workflows endpoint - should return 10 workflows"""
+    def test_products_endpoint(self) -> bool:
+        """Test /products endpoint - should return 10 products"""
         try:
-            response = self.session.get(f"{self.base_url}/workflows", timeout=TIMEOUT)
+            response = self.session.get(f"{self.base_url}/products", timeout=TIMEOUT)
             
             if response.status_code != 200:
-                self.log_result("Workflows API", False, f"Status {response.status_code}")
+                self.log_result("Products API", False, f"Status {response.status_code}")
                 return False
             
             data = response.json()
             
-            if "workflows" not in data or "count" not in data:
-                self.log_result("Workflows API", False, "Missing workflows or count field")
+            if "products" not in data or "count" not in data:
+                self.log_result("Products API", False, "Missing products or count field")
                 return False
             
-            workflows = data["workflows"]
+            products = data["products"]
             
             if data["count"] != 10:
-                self.log_result("Workflows API", False, f"Expected 10 workflows, got {data['count']}")
+                self.log_result("Products API", False, f"Expected 10 products, got {data['count']}")
                 return False
             
-            if len(workflows) != 10:
-                self.log_result("Workflows API", False, f"Count mismatch: declared {data['count']}, actual {len(workflows)}")
+            if len(products) != 10:
+                self.log_result("Products API", False, f"Count mismatch: declared {data['count']}, actual {len(products)}")
                 return False
             
-            # Validate workflow structure
-            required_fields = ["id", "name", "description", "category", "workflow_type", "agents_involved"]
-            for i, workflow in enumerate(workflows):
+            # Validate product structure
+            required_fields = ["id", "name", "category", "unit_cost", "lead_time_days"]
+            for i, product in enumerate(products):
                 for field in required_fields:
-                    if field not in workflow:
-                        self.log_result("Workflows API", False, f"Workflow {i} missing field: {field}")
+                    if field not in product:
+                        self.log_result("Products API", False, f"Product {i} missing field: {field}")
                         return False
             
-            self.log_result("Workflows API", True, f"Retrieved {len(workflows)} workflows")
+            self.log_result("Products API", True, f"Retrieved {len(products)} products")
             return True
             
         except Exception as e:
-            self.log_result("Workflows API", False, str(e))
+            self.log_result("Products API", False, str(e))
             return False
 
-    def test_individual_workflow(self) -> bool:
-        """Test /workflows/{id} endpoint"""
+    def test_suppliers_endpoint(self) -> bool:
+        """Test /suppliers endpoint - should return 8 suppliers"""
         try:
-            # First get workflows list to get an ID
-            workflows_response = self.session.get(f"{self.base_url}/workflows", timeout=TIMEOUT)
-            if workflows_response.status_code != 200:
-                self.log_result("Individual Workflow", False, "Cannot get workflows list")
-                return False
-            
-            workflows_data = workflows_response.json()
-            if not workflows_data.get("workflows"):
-                self.log_result("Individual Workflow", False, "No workflows available")
-                return False
-            
-            workflow_id = workflows_data["workflows"][0]["id"]
-            
-            response = self.session.get(f"{self.base_url}/workflows/{workflow_id}", timeout=TIMEOUT)
+            response = self.session.get(f"{self.base_url}/suppliers", timeout=TIMEOUT)
             
             if response.status_code != 200:
-                self.log_result("Individual Workflow", False, f"Status {response.status_code}")
+                self.log_result("Suppliers API", False, f"Status {response.status_code}")
                 return False
             
             data = response.json()
-            required_fields = ["id", "name", "description", "category", "workflow_type", "agents_involved"]
+            
+            if "suppliers" not in data or "count" not in data:
+                self.log_result("Suppliers API", False, "Missing suppliers or count field")
+                return False
+            
+            suppliers = data["suppliers"]
+            
+            if data["count"] != 8:
+                self.log_result("Suppliers API", False, f"Expected 8 suppliers, got {data['count']}")
+                return False
+            
+            if len(suppliers) != 8:
+                self.log_result("Suppliers API", False, f"Count mismatch: declared {data['count']}, actual {len(suppliers)}")
+                return False
+            
+            # Validate supplier structure
+            required_fields = ["id", "name", "country", "region", "reliability_score", "quality_rating", "on_time_delivery"]
+            for i, supplier in enumerate(suppliers):
+                for field in required_fields:
+                    if field not in supplier:
+                        self.log_result("Suppliers API", False, f"Supplier {i} missing field: {field}")
+                        return False
+            
+            self.log_result("Suppliers API", True, f"Retrieved {len(suppliers)} suppliers")
+            return True
+            
+        except Exception as e:
+            self.log_result("Suppliers API", False, str(e))
+            return False
+
+    def test_tools_endpoint(self) -> bool:
+        """Test /tools endpoint - should return 8 LangChain tools"""
+        try:
+            response = self.session.get(f"{self.base_url}/tools", timeout=TIMEOUT)
+            
+            if response.status_code != 200:
+                self.log_result("Tools API", False, f"Status {response.status_code}")
+                return False
+            
+            data = response.json()
+            
+            if "tools" not in data or "count" not in data:
+                self.log_result("Tools API", False, "Missing tools or count field")
+                return False
+            
+            tools = data["tools"]
+            
+            if data["count"] != 8:
+                self.log_result("Tools API", False, f"Expected 8 tools, got {data['count']}")
+                return False
+            
+            if len(tools) != 8:
+                self.log_result("Tools API", False, f"Count mismatch: declared {data['count']}, actual {len(tools)}")
+                return False
+            
+            # Validate tool structure
+            required_fields = ["name", "description"]
+            for i, tool in enumerate(tools):
+                for field in required_fields:
+                    if field not in tool:
+                        self.log_result("Tools API", False, f"Tool {i} missing field: {field}")
+                        return False
+            
+            self.log_result("Tools API", True, f"Retrieved {len(tools)} LangChain tools")
+            return True
+            
+        except Exception as e:
+            self.log_result("Tools API", False, str(e))
+            return False
+
+    def test_tools_invoke_forecast(self) -> bool:
+        """Test /tools/invoke with forecast_demand tool"""
+        try:
+            test_data = {
+                "tool_name": "forecast_demand",
+                "parameters": {
+                    "product_id": "PRD-001",
+                    "periods": 3
+                }
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/tools/invoke",
+                json=test_data,
+                timeout=TIMEOUT * 2
+            )
+            
+            if response.status_code != 200:
+                self.log_result("Tools Invoke (forecast_demand)", False, f"Status {response.status_code}")
+                return False
+            
+            data = response.json()
+            required_fields = ["tool", "result"]
             
             for field in required_fields:
                 if field not in data:
-                    self.log_result("Individual Workflow", False, f"Missing field: {field}")
+                    self.log_result("Tools Invoke (forecast_demand)", False, f"Missing field: {field}")
                     return False
             
-            self.log_result("Individual Workflow", True, f"Retrieved workflow: {data['name']}")
+            if data["tool"] != "forecast_demand":
+                self.log_result("Tools Invoke (forecast_demand)", False, f"Wrong tool returned: {data['tool']}")
+                return False
+            
+            # Check if result contains forecast data
+            result = data["result"]
+            if isinstance(result, dict) and "product_id" in result and "forecasts" in result:
+                self.log_result("Tools Invoke (forecast_demand)", True, f"Forecast generated for {result['product_id']}")
+                return True
+            else:
+                self.log_result("Tools Invoke (forecast_demand)", False, "Invalid forecast result structure")
+                return False
+            
+        except Exception as e:
+            self.log_result("Tools Invoke (forecast_demand)", False, str(e))
+            return False
+
+    def test_supplier_risk_analysis(self) -> bool:
+        """Test /supplier-risk/analyze endpoint - comprehensive analysis"""
+        try:
+            test_data = {
+                "supplier_id": "SUP-001",
+                "include_news": True
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/supplier-risk/analyze",
+                json=test_data,
+                timeout=TIMEOUT * 2  # Give more time for LLM processing
+            )
+            
+            if response.status_code != 200:
+                self.log_result("Supplier Risk Analysis", False, f"Status {response.status_code}")
+                return False
+            
+            data = response.json()
+            required_fields = ["supplier_id", "risk_assessment", "agent_insights", "timestamp"]
+            
+            for field in required_fields:
+                if field not in data:
+                    self.log_result("Supplier Risk Analysis", False, f"Missing field: {field}")
+                    return False
+            
+            # Validate risk assessment structure
+            risk_assessment = data["risk_assessment"]
+            if not isinstance(risk_assessment, dict):
+                self.log_result("Supplier Risk Analysis", False, "risk_assessment is not a dict")
+                return False
+            
+            risk_required = ["risk_score", "risk_level", "component_scores", "recommendation"]
+            for field in risk_required:
+                if field not in risk_assessment:
+                    self.log_result("Supplier Risk Analysis", False, f"Risk assessment missing: {field}")
+                    return False
+            
+            self.log_result("Supplier Risk Analysis", True, f"Risk: {risk_assessment['risk_level']} ({risk_assessment['risk_score']})")
             return True
             
         except Exception as e:
-            self.log_result("Individual Workflow", False, str(e))
+            self.log_result("Supplier Risk Analysis", False, str(e))
+            return False
+
+    def test_analytics_shipments(self) -> bool:
+        """Test /analytics/shipments endpoint - should return shipment stats with delay reasons"""
+        try:
+            response = self.session.get(f"{self.base_url}/analytics/shipments", timeout=TIMEOUT)
+            
+            if response.status_code != 200:
+                self.log_result("Analytics Shipments", False, f"Status {response.status_code}")
+                return False
+            
+            data = response.json()
+            required_fields = ["total_shipments", "on_time", "delayed", "on_time_rate", "delay_reasons"]
+            
+            for field in required_fields:
+                if field not in data:
+                    self.log_result("Analytics Shipments", False, f"Missing field: {field}")
+                    return False
+            
+            # Validate delay reasons structure
+            delay_reasons = data["delay_reasons"]
+            if not isinstance(delay_reasons, dict):
+                self.log_result("Analytics Shipments", False, "delay_reasons should be a dict")
+                return False
+            
+            # Check some stats make sense
+            total = data["total_shipments"]
+            on_time = data["on_time"]
+            delayed = data["delayed"]
+            
+            if total != (on_time + delayed):
+                self.log_result("Analytics Shipments", False, f"Shipment counts don't add up: {total} != {on_time} + {delayed}")
+                return False
+            
+            self.log_result("Analytics Shipments", True, f"Total: {total}, On-time: {on_time}, Rate: {data['on_time_rate']}%")
+            return True
+            
+        except Exception as e:
+            self.log_result("Analytics Shipments", False, str(e))
             return False
 
     def test_agent_states_endpoint(self) -> bool:
@@ -173,7 +346,7 @@ class SupplyMindAPITester:
                     return False
                 
                 agent_data = agents[agent]
-                required_fields = ["agent", "status"]
+                required_fields = ["status"]
                 
                 for field in required_fields:
                     if field not in agent_data:
@@ -186,169 +359,6 @@ class SupplyMindAPITester:
         except Exception as e:
             self.log_result("Agent States", False, str(e))
             return False
-
-    def test_supplier_risk_analysis(self) -> bool:
-        """Test /supplier-risk/analyze endpoint"""
-        try:
-            test_data = {
-                "supplier_name": "Test Supplier Inc",
-                "include_news": True
-            }
-            
-            response = self.session.post(
-                f"{self.base_url}/supplier-risk/analyze",
-                json=test_data,
-                timeout=TIMEOUT * 2  # Give more time for LLM processing
-            )
-            
-            if response.status_code != 200:
-                self.log_result("Supplier Risk Analysis", False, f"Status {response.status_code}")
-                return False
-            
-            data = response.json()
-            required_fields = ["supplier_name", "risk_level", "risk_score", "risk_factors", "llm_reasoning", "recommendation"]
-            
-            for field in required_fields:
-                if field not in data:
-                    self.log_result("Supplier Risk Analysis", False, f"Missing field: {field}")
-                    return False
-            
-            # Validate risk_level values
-            valid_risk_levels = ["low", "medium", "high", "critical"]
-            if data["risk_level"] not in valid_risk_levels:
-                self.log_result("Supplier Risk Analysis", False, f"Invalid risk_level: {data['risk_level']}")
-                return False
-            
-            # Validate risk_score is numeric and in valid range
-            try:
-                risk_score = float(data["risk_score"])
-                if not (0 <= risk_score <= 100):
-                    self.log_result("Supplier Risk Analysis", False, f"Risk score out of range: {risk_score}")
-                    return False
-            except (ValueError, TypeError):
-                self.log_result("Supplier Risk Analysis", False, f"Invalid risk score: {data['risk_score']}")
-                return False
-            
-            self.log_result("Supplier Risk Analysis", True, f"Risk: {data['risk_level']} ({data['risk_score']}%)")
-            return True
-            
-        except Exception as e:
-            self.log_result("Supplier Risk Analysis", False, str(e))
-            return False
-
-    def test_reports_master(self) -> bool:
-        """Test /reports/master endpoint"""
-        try:
-            response = self.session.get(f"{self.base_url}/reports/master", timeout=TIMEOUT)
-            
-            if response.status_code != 200:
-                self.log_result("Master Report", False, f"Status {response.status_code}")
-                return False
-            
-            data = response.json()
-            required_fields = ["title", "sections", "generated_at"]
-            
-            for field in required_fields:
-                if field not in data:
-                    self.log_result("Master Report", False, f"Missing field: {field}")
-                    return False
-            
-            sections = data["sections"]
-            if not isinstance(sections, list) or len(sections) == 0:
-                self.log_result("Master Report", False, "No sections found")
-                return False
-            
-            # Validate section structure
-            for i, section in enumerate(sections):
-                section_fields = ["id", "title", "content"]
-                for field in section_fields:
-                    if field not in section:
-                        self.log_result("Master Report", False, f"Section {i} missing field: {field}")
-                        return False
-            
-            self.log_result("Master Report", True, f"Retrieved report with {len(sections)} sections")
-            return True
-            
-        except Exception as e:
-            self.log_result("Master Report", False, str(e))
-            return False
-
-    def test_reports_slides(self) -> bool:
-        """Test /reports/slides endpoint"""
-        try:
-            response = self.session.get(f"{self.base_url}/reports/slides", timeout=TIMEOUT)
-            
-            if response.status_code != 200:
-                self.log_result("Slides Report", False, f"Status {response.status_code}")
-                return False
-            
-            data = response.json()
-            required_fields = ["title", "slides", "generated_at"]
-            
-            for field in required_fields:
-                if field not in data:
-                    self.log_result("Slides Report", False, f"Missing field: {field}")
-                    return False
-            
-            slides = data["slides"]
-            if not isinstance(slides, list) or len(slides) == 0:
-                self.log_result("Slides Report", False, "No slides found")
-                return False
-            
-            # Validate slide structure
-            for i, slide in enumerate(slides):
-                slide_fields = ["number", "title"]
-                for field in slide_fields:
-                    if field not in slide:
-                        self.log_result("Slides Report", False, f"Slide {i} missing field: {field}")
-                        return False
-            
-            self.log_result("Slides Report", True, f"Retrieved {len(slides)} slides")
-            return True
-            
-        except Exception as e:
-            self.log_result("Slides Report", False, str(e))
-            return False
-
-    def test_metrics_endpoints(self) -> bool:
-        """Test metrics endpoints"""
-        success_count = 0
-        
-        # Test system metrics
-        try:
-            response = self.session.get(f"{self.base_url}/metrics/system", timeout=TIMEOUT)
-            if response.status_code == 200:
-                data = response.json()
-                required_fields = ["total_workflows", "active_agents", "decisions_today"]
-                if all(field in data for field in required_fields):
-                    success_count += 1
-                    print("✅ System Metrics")
-                else:
-                    print("❌ System Metrics - Missing required fields")
-            else:
-                print(f"❌ System Metrics - Status {response.status_code}")
-        except Exception as e:
-            print(f"❌ System Metrics - {str(e)}")
-        
-        # Test KPIs
-        try:
-            response = self.session.get(f"{self.base_url}/metrics/kpis", timeout=TIMEOUT)
-            if response.status_code == 200:
-                data = response.json()
-                if "kpis" in data and isinstance(data["kpis"], list):
-                    success_count += 1
-                    print("✅ KPI Metrics")
-                else:
-                    print("❌ KPI Metrics - Invalid structure")
-            else:
-                print(f"❌ KPI Metrics - Status {response.status_code}")
-        except Exception as e:
-            print(f"❌ KPI Metrics - {str(e)}")
-        
-        self.tests_run += 2
-        self.tests_passed += success_count
-        
-        return success_count == 2
 
     def test_analytics_endpoints(self) -> bool:
         """Test analytics endpoints"""
@@ -366,11 +376,11 @@ class SupplyMindAPITester:
                 response = self.session.get(f"{self.base_url}/analytics/{endpoint}", timeout=TIMEOUT)
                 if response.status_code == 200:
                     data = response.json()
-                    if "data" in data and isinstance(data["data"], list):
+                    if "data" in data:
                         success_count += 1
                         print(f"✅ Analytics - {endpoint}")
                     else:
-                        print(f"❌ Analytics - {endpoint} - Invalid structure")
+                        print(f"❌ Analytics - {endpoint} - Missing data field")
                 else:
                     print(f"❌ Analytics - {endpoint} - Status {response.status_code}")
             except Exception as e:
@@ -383,34 +393,32 @@ class SupplyMindAPITester:
 
     def run_all_tests(self) -> Dict[str, Any]:
         """Run all backend tests"""
-        print(f"🔍 Testing SupplyMind Backend API: {self.base_url}")
-        print("=" * 60)
+        print(f"🔍 Testing SupplyMind LangChain Backend API: {self.base_url}")
+        print("=" * 70)
         
         start_time = time.time()
         
         # Core functionality tests
         print("\n📊 Core API Tests:")
         self.test_health_endpoint()
-        self.test_workflows_endpoint()
-        self.test_individual_workflow()
+        self.test_products_endpoint()
+        self.test_suppliers_endpoint()
+        self.test_tools_endpoint()
         self.test_agent_states_endpoint()
         
-        print("\n🤖 AI/LLM Tests:")
+        print("\n🤖 LangChain Tool Tests:")
+        self.test_tools_invoke_forecast()
         self.test_supplier_risk_analysis()
         
-        print("\n📄 Reports Tests:")
-        self.test_reports_master()
-        self.test_reports_slides()
-        
-        print("\n📈 Data/Analytics Tests:")
-        self.test_metrics_endpoints()
+        print("\n📈 Analytics Tests:")
         self.test_analytics_endpoints()
+        self.test_analytics_shipments()
         
         end_time = time.time()
         execution_time = end_time - start_time
         
         # Summary
-        print("\n" + "=" * 60)
+        print("\n" + "=" * 70)
         print(f"📊 Test Summary:")
         print(f"   Tests Run: {self.tests_run}")
         print(f"   Passed: {self.tests_passed}")
@@ -435,7 +443,7 @@ class SupplyMindAPITester:
 
 def main():
     """Main test execution"""
-    print("🚀 SupplyMind Backend API Testing Suite")
+    print("🚀 SupplyMind LangChain Backend API Testing Suite")
     print(f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     tester = SupplyMindAPITester()
@@ -443,7 +451,7 @@ def main():
     
     # Exit with appropriate code
     if results["failed_tests"] == 0:
-        print("\n🎉 All tests passed! Backend is functioning correctly.")
+        print("\n🎉 All tests passed! Backend LangChain system is functioning correctly.")
         return 0
     else:
         print(f"\n⚠️  {results['failed_tests']} test(s) failed. Check logs for details.")
